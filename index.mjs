@@ -329,7 +329,9 @@ const App = () => {
     }, /*#__PURE__*/React.createElement("a", null, hex.label));
   }));
 };
-render( /*#__PURE__*/React.createElement(BrowserRouter, null, /*#__PURE__*/React.createElement(Routes, null, /*#__PURE__*/React.createElement(Route, {
+render( /*#__PURE__*/React.createElement(BrowserRouter, {
+  basename: "Hexcells"
+}, /*#__PURE__*/React.createElement(Routes, null, /*#__PURE__*/React.createElement(Route, {
   path: "/",
   element: /*#__PURE__*/React.createElement(App, null)
 }))), document.getElementById('app'));
