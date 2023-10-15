@@ -1,66 +1,22 @@
-export const calculate_neighbour_count = (level, x, y, value) => {
+export const calculate_neighbour_count = (level, x, y, values) => {
   let count = 0;
   for (let [nx, ny] of get_neighbours(level, x, y)) {
     let nv = level[ny][nx];
-    if (nv == value) {
+    if (values.includes(nv)) {
       count += 1;
     }
   }
   return count;
 };
-export const reveal_known_neighbour = (level, x, y) => {
-  if (calculate_neighbour_count(level, x, y, 'y') == 0 || calculate_neighbour_count(level, x, y, 'n') + calculate_neighbour_count(level, x, y, 'h') == 0) {
-    return reveal_and_propagate(level, get_neighbours(level, x, y));
+export const get_level_bounds = level => {
+  let [top, left, bottom, right] = [Number.MAX_VALUE, Number.MAX_VALUE, 0, 0];
+  for (let [x, y] of get_tiles(level)) {
+    top = Math.min(x + y, top);
+    bottom = Math.max(x + y, bottom);
+    left = Math.min(x - y, left);
+    right = Math.max(x - y, right);
   }
-  return [];
-};
-export const reveal_known_line = (level, x, y) => {
-  let affected = [];
-  for (let direction of ['L', 'R', 'U']) {
-    let all_y = true;
-    let all_n = true;
-    let has_clue = false;
-    for (let [lx, ly] of get_line(level, x, y, direction)) {
-      let lv = level[ly][lx];
-      if (lv == 'y') {
-        all_n = false;
-      }
-      if (lv == 'n' || lv == 'h') {
-        all_y = false;
-      }
-      if (lv == direction) {
-        has_clue = true;
-      }
-    }
-    if (has_clue && (all_y || all_n)) {
-      // console.log('reveal line', x, y, direction);
-      affected = [...affected, ...reveal_and_propagate(level, get_line(level, x, y, direction))];
-    }
-  }
-  return affected;
-};
-export const reveal_and_propagate = (level, tiles) => {
-  let affected = [];
-  for (let tile of tiles) {
-    let [x, y] = tile;
-    if (['y', 'n', 'h'].includes(level[y][x])) {
-      console.log('reveal', x, y);
-      level[y][x] = level[y][x].toUpperCase();
-      affected.push(tile);
-      if (level[y][x] == 'N') {
-        affected = [...affected, ...reveal_known_neighbour(level, x, y)];
-      }
-      for (let [nx, ny] of get_neighbours(level, x, y)) {
-        let nv = level[ny][nx];
-        if (nv == 'N') {
-          affected = [...affected, ...reveal_known_neighbour(level, nx, ny)];
-        }
-      }
-      affected = [...affected, ...reveal_known_line(level, x, y)];
-    }
-  }
-  // console.log("reveal", affected);
-  return affected;
+  return [top, left, bottom, right];
 };
 export const get_neighbours = (level, x, y) => {
   const neighbours = [[-1, -1], [0, -1], [-1, 0], [1, 0], [0, 1], [1, 1]];
@@ -95,10 +51,10 @@ export const get_line = (level, x, y, direction) => {
   }
   return line;
 };
-export const calculate_line_count = (level, x, y, direction) => {
+export const calculate_line_count = (level, x, y, direction, values) => {
   let count = 0;
   for (let [tx, ty] of get_line(level, x, y, direction)) {
-    if (level[ty][tx] == 'y') {
+    if (values.includes(level[ty][tx])) {
       count += 1;
     }
   }
@@ -125,7 +81,7 @@ export const hide_line_clues = (level, x, y) => {
     let is_done = true;
     for (let [lx, ly] of get_line(level, x, y, direction)) {
       let lv = level[ly][lx];
-      if (['y', 'n', 'h'].includes(lv)) {
+      if (['y', 'n', 'h', 't'].includes(lv)) {
         is_done = false;
       }
       if (lv == direction) {
@@ -138,18 +94,60 @@ export const hide_line_clues = (level, x, y) => {
     }
   }
 };
-export const apply_clues = (level, clues) => {
-  level = level.map(line => line.map(tile => tile));
-  // for(let [cv, cx, cy] of clues){
-  //     if(['Y', 'N', 'H'].includes(cv)){
-  //         reveal_and_propagate(level, [[cx, cy]]);
-  //     }else{
-  //         level[cy][cx] = level[cy][cx].toUpperCase();
-  //         reveal_known_line(level, cx, cy);
-  //     }
-  // }
-  for (let [cv, cx, cy] of clues) {
-    level[cy][cx] = level[cy][cx].toUpperCase();
+export const get_neighbours_empty = (level, x, y) => get_neighbours(level, x, y).filter(([x, y]) => level[y][x] == ' ');
+export const get_neighbours_candidates = (level, x, y) => get_neighbours(level, x, y).filter(([x, y]) => [' ', 'H', 'T'].includes(level[y][x]));
+export const get_line_empty = (level, x, y, d) => get_line(level, x, y, d).filter(([x, y]) => level[y][x] == ' ');
+export const get_line_headers = (level, x, y) => {
+  let output = [];
+  for (let d of ['L', 'R', 'U']) {
+    let line = get_line(level, x, y, d);
+    if (line.length > 0) {
+      let [lx, ly] = line[0];
+      if (['l', 'r'].includes(level[ly][lx])) {
+        output.push(line[0]);
+      }
+      [lx, ly] = line[line.length - 1];
+      if ('u' == level[ly][lx]) {
+        output.push(line[line.length - 1]);
+      }
+    }
   }
-  return level;
+  return output;
+};
+export const get_tiles_empty = level => get_tiles(level).filter(([x, y]) => level[y][x] == ' ');
+export const level_to_string = level => {
+  let [top, left, bottom, right] = get_level_bounds(level);
+  let dx = -left;
+  let dy = -top;
+  let level_data = Array(bottom - top + 1);
+  for (let j of Array(bottom - top + 1).keys()) {
+    level_data[j] = Array(2 * (right - left + 1));
+    for (let i of Array(2 * (right - left + 1)).keys()) {
+      level_data[j][i] = ' ';
+    }
+  }
+  for (let [x, y] of get_tiles(level)) {
+    let j = x + y + dy;
+    // let i = 2 * (dx + x - y) + j % 2;
+    let i = dx + x - y;
+    // console.log(j, i);
+    if (level[y][x] == ' ') {
+      level_data[j][i] = '.';
+    } else {
+      level_data[j][i] = level[y][x];
+    }
+  }
+  let output = "";
+  for (let j of Array(bottom - top + 1).keys()) {
+    output += level_data[j].join('') + "\n";
+  }
+  return output;
+};
+export const is_solved = level => {
+  for (let [x, y] of get_tiles(level)) {
+    if (level[y][x] == ' ') {
+      return false;
+    }
+  }
+  return true;
 };
